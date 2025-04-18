@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shadow-gate-v10';
+const CACHE_NAME = 'shadow-gate-v12';
 const CACHE_URLS = [
   '/',
   '/index.html',
@@ -12,14 +12,6 @@ const CACHE_URLS = [
 
 const supabaseUrl = 'https://nwoswxbtlquiekyangbs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53b3N3eGJ0bHF1aWVreWFuZ2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3ODEwMjcsImV4cCI6MjA2MDM1NzAyN30.KarBv9AopQpldzGPamlj3zu9eScKltKKHH2JJblpoCE';
-
-// Configuração do serviço de filmes
-const XTREAM_CONFIG = {
-  host: 'sigcine1.space',
-  port: 80,
-  username: '474912714',
-  password: '355591139'
-};
 
 // Função para mostrar alertas
 async function sendAlertToClient(message, type) {
@@ -197,7 +189,7 @@ async function handleFilmesRequest(event) {
     await incrementRequestCount(projectId, 'filmes');
 
     // Buscar dados da API de filmes
-    const apiUrl = `http://${XTREAM_CONFIG.host}/player_api.php?username=${XTREAM_CONFIG.username}&password=${XTREAM_CONFIG.password}&action=get_vod_streams`;
+    const apiUrl = 'https://sigcine1.space/player_api.php?username=474912714&password=355591139&action=get_vod_streams';
     const apiResponse = await fetch(apiUrl);
     
     if (!apiResponse.ok) {
@@ -206,11 +198,10 @@ async function handleFilmesRequest(event) {
 
     const filmesData = await apiResponse.json();
 
-    // Adicionar URL do player ofuscada
+    // Adicionar URL do player para cada filme
     const filmesComPlayer = filmesData.map(filme => ({
       ...filme,
-      // URL ofuscada no formato: /project-id/stream/stream_id.mp4
-      player: `${self.location.origin}/${projectId}/stream/${filme.stream_id}.mp4`
+      player: `http://sigcine1.space:80/movie/474912714/355591139/${filme.stream_id}.mp4`
     }));
 
     const responseData = {
@@ -230,52 +221,7 @@ async function handleFilmesRequest(event) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    };
-  }
-}
-
-// Handler para requests de streaming
-async function handleStreamRequest(event) {
-  try {
-    const url = new URL(event.request.url);
-    const pathParts = url.pathname.split('/').filter(part => part !== '');
-    
-    // Verificar se é uma requisição de stream (/project-id/stream/id.mp4)
-    if (pathParts.length === 3 && pathParts[1] === 'stream') {
-      const projectId = pathParts[0];
-      const streamId = pathParts[2].replace('.mp4', '');
-      
-      // Verificar se o projeto existe
-      const projectExists = await verifyProjectExists(projectId);
-      if (!projectExists) {
-        return new Response(null, { status: 404 });
-      }
-
-      // URL real do stream (não exposta ao cliente)
-      const realStreamUrl = `http://${XTREAM_CONFIG.host}:${XTREAM_CONFIG.port}/movie/${XTREAM_CONFIG.username}/${XTREAM_CONFIG.password}/${streamId}.mp4`;
-      
-      // Buscar o stream e retornar como resposta
-      const streamResponse = await fetch(realStreamUrl);
-      
-      if (!streamResponse.ok) {
-        throw new Error('Stream não encontrado');
-      }
-
-      // Retornar o stream com os headers apropriados
-      return new Response(streamResponse.body, {
-        status: 200,
-        headers: {
-          'Content-Type': 'video/mp4',
-          'Cache-Control': 'no-store',
-          'Access-Control-Allow-Origin': '*'
-        }
-      });
-    }
-
-    return new Response(null, { status: 404 });
-
-  } catch (error) {
-    return new Response(null, { status: 500 });
+    });
   }
 }
 
@@ -292,12 +238,6 @@ self.addEventListener('fetch', (event) => {
   // Requests para /projectid/filmes
   if (url.pathname.match(/\/[^\/]+\/filmes$/)) {
     event.respondWith(handleFilmesRequest(event));
-    return;
-  }
-
-  // Requests para streaming (/projectid/stream/id.mp4)
-  if (url.pathname.match(/\/[^\/]+\/stream\/[^\/]+\.mp4$/)) {
-    event.respondWith(handleStreamRequest(event));
     return;
   }
 
@@ -366,11 +306,11 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Função auxiliar para obter projetos
+// Função auxiliar para obter projetos (simplificada)
 function getProjects() {
   try {
     return JSON.parse(localStorage.getItem('shadowGateProjects4')) || [];
   } catch (e) {
     return [];
   }
-}
+                       }
