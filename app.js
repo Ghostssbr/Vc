@@ -40,6 +40,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             const registration = await navigator.serviceWorker.register('/sw.js', {
                 scope: '/'
             });
+            
+            showAlert('j!', 'info');
 
             navigator.serviceWorker.addEventListener('message', event => {
                 if (event.data.type === 'GET_PROJECTS') {
@@ -58,7 +60,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             });
         } catch (error) {
             console.error('SW registration failed:', error);
-            showAlert('Falha ao registrar Service Worker', 'danger');
+            showAlert('Falha ao registrar Service Worker: ' + error, 'danger');
         }
     }
 
