@@ -218,7 +218,7 @@ self.addEventListener('activate', (event) => {
             }
           })
         );
-        await sendAlertToClient('Service Worker ativado!', 'success');
+        await sendAlertToClient('Service2 Worker ativado!', 'success');
       } catch (error) {
         await sendAlertToClient(`Falha na ativação: ${error.message}`, 'danger');
       }
