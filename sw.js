@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shadow-gate-v12';
+const CACHE_NAME = 'shadow-gate-v10';
 const CACHE_URLS = [
   '/',
   '/index.html',
