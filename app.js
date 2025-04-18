@@ -4,14 +4,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53b3N3eGJ0bHF1aWVreWFuZ2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3ODEwMjcsImV4cCI6MjA2MDM1NzAyN30.KarBv9AopQpldzGPamlj3zu9eScKltKKHH2JJblpoCE';
     let supabase;
 
-    // Obter projetos do localStorage
+    // Função para verificar e corrigir dados
     function getProjects() {
         try {
             const projects = JSON.parse(localStorage.getItem('shadowGateProjects4')) || [];
-            if (!Array.isArray(projects)) throw new Error('Invalid data');
+            if (!Array.isArray(projects)) throw new Error('Dados inválidos');
             return projects.filter(p => p && p.id);
         } catch (e) {
-            console.error('Fixing corrupted data...', e);
+            console.error('Corrigindo dados corrompidos...', e);
             localStorage.setItem('shadowGateProjects4', JSON.stringify([]));
             return [];
         }
@@ -32,70 +32,48 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('shadowGateProjects4', JSON.stringify(projects));
     }
 
-    // Registrar Service Worker
-    async function registerServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            try {
-                const registration = await navigator.serviceWorker.register('/sw.js', {
-                    scope: '/'
-                });
+    updateDailyCounters();
 
-                // Atualizar projetos quando SW solicitar
-                navigator.serviceWorker.addEventListener('message', event => {
-                    if (event.data.type === 'GET_PROJECTS') {
-                        event.ports[0].postMessage(getProjects());
-                    }
-                });
-
-                // Detectar atualizações
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'activated') {
-                            showAlert('New version available!', 'info');
-                            setTimeout(() => window.location.reload(), 1500);
-                        }
-                    });
-                });
-
-                return registration;
-            } catch (error) {
-                showAlert('SW registration failed:' + error, 'danger');
-                //showAlert('Failed to register Service Worker', 'danger');
-                return null;
-            }
-        }
-        return null;
-    }
-
-    // Inicializar Supabase
-    async function initSupabase() {
+    // Service Worker
+    if ('serviceWorker' in navigator) {
         try {
-            supabase = window.supabase.createClient(supabaseUrl, supabaseKey, {
-                auth: {
-                    persistSession: false,
-                    autoRefreshToken: false
+            const registration = await navigator.serviceWorker.register('/sw.js', {
+                scope: '/'
+            });
+
+            navigator.serviceWorker.addEventListener('message', event => {
+                if (event.data.type === 'GET_PROJECTS') {
+                    event.ports[0].postMessage(getProjects());
                 }
             });
-            window.supabase = supabase;
 
-            // Testar conexão
-            const { error } = await supabase
-                .from('project_tokens')
-                .select('*')
-                .limit(1);
-
-            if (error) throw error;
-            
-            return true;
+            registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'activated') {
+                        showAlert('Nova versão disponível!', 'info');
+                        setTimeout(() => window.location.reload(), 1500);
+                    }
+                });
+            });
         } catch (error) {
-            console.error('Supabase error:', error);
-            showAlert('Database connection error', 'danger');
-            return false;
+            console.error('SW registration failed:', error);
+            showAlert('Falha ao registrar Service Worker', 'danger');
         }
     }
 
-    // Carregar projetos na UI
+    // Conexão com Supabase
+    try {
+        supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        window.supabase = supabase;
+    } catch (error) {
+        console.error('Supabase error:', error);
+        showAlert('Erro ao conectar com o banco de dados', 'danger');
+    }
+
+    loadProjects();
+    setupForm();
+
     function loadProjects() {
         const container = document.getElementById('projectsContainer');
         const noProjects = document.getElementById('noProjects');
@@ -113,17 +91,17 @@ document.addEventListener('DOMContentLoaded', async function() {
                 </div>
                 <div class="p-4 border-b border-gray-700">
                     <div class="flex justify-between items-start">
-                        <h3 class="text-lg font-semibold text-white tracking-wider">${project.name || 'Unnamed'}</h3>
+                        <h3 class="text-lg font-semibold text-white tracking-wider">${project.name || 'Sem nome'}</h3>
                         <span class="status-badge ${(project.status || 'active') === 'active' ? 'text-green-400' : 'text-yellow-400'} text-xs font-medium px-2 py-0.5 rounded-full bg-opacity-20 ${(project.status || 'active') === 'active' ? 'bg-green-900' : 'bg-yellow-900'}">
                             ${(project.status || 'active') === 'active' ? 'ACTIVE' : 'INACTIVE'}
                         </span>
                     </div>
-                    <p class="text-xs text-gray-400 mt-1 tracking-wider">CREATED ${project.createdAt ? formatDate(project.createdAt) : 'Unknown date'}</p>
+                    <p class="text-xs text-gray-400 mt-1 tracking-wider">CREATED ${project.createdAt ? formatDate(project.createdAt) : 'Data desconhecida'}</p>
                 </div>
                 <div class="p-4">
                     <div class="flex items-center mb-3">
                         <i class="bi bi-link text-gray-400 mr-2"></i>
-                        <span class="text-xs text-gray-300 truncate">${project.url || 'No URL'}</span>
+                        <span class="text-xs text-gray-300 truncate">${project.url || 'Sem URL'}</span>
                     </div>
                     <div class="flex justify-between text-xs text-gray-400 tracking-wider">
                         <span>${project.requestsToday || 0}/${REQUEST_LIMIT_PER_DAY} REQUESTS TODAY</span>
@@ -140,7 +118,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // Configurar formulário de novo projeto
     function setupForm() {
         document.getElementById('newProjectForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -149,7 +126,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const spreadsheetUrl = document.getElementById('spreadsheetUrl').value.trim();
             
             if (!projectName || !spreadsheetUrl) {
-                showAlert('Please fill all required fields', 'danger');
+                showAlert('Preencha todos os campos obrigatórios', 'danger');
                 return;
             }
 
@@ -175,13 +152,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                 
                 // Verificar duplicatas
                 if (projects.some(p => p.id === idProject)) {
-                    throw new Error('Project already exists');
+                    throw new Error('Projeto já existe');
                 }
                 
                 projects.push(newProject);
                 localStorage.setItem('shadowGateProjects4', JSON.stringify(projects));
                 
-                // Criar no Supabase se estiver conectado
+                // Supabase - Criar registro nas duas tabelas
                 if (window.supabase) {
                     // Tabela project_tokens
                     const { error: tokenError } = await supabase
@@ -209,19 +186,19 @@ document.addEventListener('DOMContentLoaded', async function() {
                     if (requestError) throw requestError;
                 }
                 
-                showAlert('Project created successfully!', 'success');
+                showAlert('Projeto criado com sucesso!', 'success');
                 setTimeout(() => {
                     window.location.href = `dashboard.html?project=${encodeURIComponent(idProject)}`;
                 }, 1500);
                 
             } catch (error) {
-                console.error('Error creating project:', error);
-                showAlert(`Error: ${error.message}`, 'danger');
+                console.error('Erro ao criar projeto:', error);
+                showAlert(`Erro: ${error.message}`, 'danger');
             }
         });
     }
 
-    // Gerar dados de atividade simulados
+    // Funções auxiliares
     function generateActivityData() {
         return {
             '7d': Array.from({length: 7}, () => Math.floor(Math.random() * 50) + 10),
@@ -230,18 +207,16 @@ document.addEventListener('DOMContentLoaded', async function() {
         };
     }
 
-    // Formatador de data
     function formatDate(dateString) {
         try {
             const options = { year: 'numeric', month: 'short', day: 'numeric' };
             return new Date(dateString).toLocaleDateString('en-US', options);
         } catch (e) {
-            console.error('Error formatting date:', e);
-            return 'Invalid date';
+            console.error('Erro ao formatar data:', e);
+            return 'Data inválida';
         }
     }
 
-    // Mostrar alerta
     function showAlert(message, type) {
         const alert = document.createElement('div');
         alert.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg text-white font-semibold tracking-wider z-50 ${
@@ -258,11 +233,4 @@ document.addEventListener('DOMContentLoaded', async function() {
             setTimeout(() => alert.remove(), 500);
         }, 3000);
     }
-
-    // Inicialização
-    updateDailyCounters();
-    await initSupabase();
-    await registerServiceWorker();
-    loadProjects();
-    setupForm();
 });
