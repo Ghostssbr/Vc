@@ -31,7 +31,6 @@ async function verifyProjectExists(projectId) {
         'Authorization': `Bearer ${supabaseKey}`
       }
     });
-    
     const data = await response.json();
     return data && data.length > 0;
   } catch (error) {
@@ -42,7 +41,6 @@ async function verifyProjectExists(projectId) {
 
 async function incrementRequestCount(projectId) {
   try {
-    // Atualizar no localStorage (se disponível)
     const clients = await self.clients.matchAll();
     clients.forEach(client => {
       client.postMessage({
@@ -51,7 +49,6 @@ async function incrementRequestCount(projectId) {
       });
     });
 
-    // Atualizar no Supabase
     const today = new Date().toISOString().split('T')[0];
     const { data: existingData, error: fetchError } = await fetch(`${supabaseUrl}/rest/v1/project_requests?project_id=eq.${projectId}`, {
       headers: {
@@ -80,7 +77,6 @@ async function incrementRequestCount(projectId) {
       updated_at: new Date().toISOString()
     };
 
-    // Verificar level up
     const currentLevel = currentData.level || 1;
     if (updatedData.total_requests >= currentLevel * 100) {
       updatedData.level = currentLevel + 1;
@@ -112,8 +108,7 @@ async function handleAnimeRequest(event) {
   try {
     const url = new URL(event.request.url);
     const projectId = url.pathname.split('/')[1];
-    
-    // Verificar se o projeto existe
+
     const projectExists = await verifyProjectExists(projectId);
     if (!projectExists) {
       return new Response(JSON.stringify({ error: 'Project not found' }), {
@@ -122,10 +117,8 @@ async function handleAnimeRequest(event) {
       });
     }
 
-    // Incrementar contador de requests
     await incrementRequestCount(projectId);
 
-    // Retornar dados do anime
     const animeData = {
       projectId,
       animes: [
@@ -134,12 +127,63 @@ async function handleAnimeRequest(event) {
       ],
       updatedAt: new Date().toISOString()
     };
-    
+
     return new Response(JSON.stringify(animeData), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
     await sendAlertToClient(`Erro no endpoint /animes: ${error.message}`, 'danger');
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function handleFilmesRequest(event) {
+  try {
+    const url = new URL(event.request.url);
+    const projectId = url.pathname.split('/')[1];
+
+    const projectExists = await verifyProjectExists(projectId);
+    if (!projectExists) {
+      return new Response(JSON.stringify({ error: 'Project not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    await incrementRequestCount(projectId);
+
+    const xtreamUsername = '474912714';
+    const xtreamPassword = '355591139';
+    const xtreamHost = 'https://sigcine1.space';
+    const xtreamURL = `${xtreamHost}/player_api.php?username=${xtreamUsername}&password=${xtreamPassword}&action=get_vod_streams`;
+
+    const response = await fetch(xtreamURL);
+    const filmes = await response.json();
+
+    const formatted = filmes.map(filme => ({
+      id: filme.stream_id,
+      title: filme.name,
+      year: filme.year,
+      category_id: filme.category_id,
+      stream_icon: filme.stream_icon,
+      player_url: `${xtreamHost}/movie/${xtreamUsername}/${xtreamPassword}/${filme.stream_id}.${filme.container_extension}`,
+      added: filme.added,
+      rating: filme.rating_5based
+    }));
+
+    return new Response(JSON.stringify({
+      projectId,
+      filmes: formatted,
+      updatedAt: new Date().toISOString()
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    await sendAlertToClient(`Erro no endpoint /filmes: ${error.message}`, 'danger');
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -188,19 +232,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (event.request.url.includes('/filmes')) {
+    event.respondWith(handleFilmesRequest(event));
+    return;
+  }
+
   event.respondWith(
     (async () => {
       try {
         const cachedResponse = await caches.match(event.request);
         if (cachedResponse) return cachedResponse;
-        
+
         const networkResponse = await fetch(event.request);
-        
         if (networkResponse.ok) {
           const cache = await caches.open(CACHE_NAME);
           cache.put(event.request, networkResponse.clone());
         }
-        
+
         return networkResponse;
       } catch (error) {
         await sendAlertToClient(`Falha na requisição: ${error.message}`, 'warning');
