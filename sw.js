@@ -1,4 +1,3 @@
-
 const CACHE_NAME = 'shadow-gate-v10';
 const CACHE_URLS = [
   '/',
@@ -120,6 +119,17 @@ async function incrementRequestCount(projectId, endpoint) {
   }
 }
 
+// Função para formatar nomes de filmes
+function formatarNomeFilme(nome) {
+  return nome
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .substring(0, 50);
+}
+
 // Handler para requests de /animes
 async function handleAnimeRequest(event) {
   try {
@@ -198,25 +208,26 @@ async function handleFilmesRequest(event) {
     }
 
     const filmesData = await apiResponse.json();
+    const domain = new URL(event.request.url).origin;
 
     // Criar URLs encapsuladas
     const filmesComPlayer = filmesData.map(filme => {
-      // Formatar nome do filme para URL
-      const nomeFilme = filme.name
-        .toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove acentos
-        .replace(/[^\w\s-]/g, '') // Remove caracteres especiais
-        .replace(/\s+/g, '-')     // Substitui espaços por hífens
-        .replace(/-+/g, '-')      // Remove hífens duplicados
-        .substring(0, 50);       // Limita o tamanho
-
+      const nomeFormatado = formatarNomeFilme(filme.name);
+      const playerEncapsulado = `${domain}/${projectId}/${nomeFormatado}.mp4`;
       const playerReal = `http://sigcine1.space:80/movie/474912714/355591139/${filme.stream_id}.mp4`;
-      const playerEncapsulado = `https://shadowgate/${projectId}/${nomeFilme}.mp4`;
       
       // Armazenar mapeamento
-      caches.open('filmes-map').then(cache => 
-        cache.put(new Request(playerEncapsulado), new Response(playerReal))
-      );
+      caches.open('filmes-map').then(cache => {
+        cache.put(
+          new Request(playerEncapsulado),
+          new Response(JSON.stringify({
+            realUrl: playerReal,
+            lastAccessed: new Date().toISOString()
+          }), {
+            headers: { 'Content-Type': 'application/json' }
+          })
+        );
+      });
 
       return {
         ...filme,
@@ -236,7 +247,10 @@ async function handleFilmesRequest(event) {
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      details: 'Falha ao processar lista de filmes'
+    }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
@@ -250,28 +264,56 @@ async function handleFilmeRedirect(event) {
     const pathParts = url.pathname.split('/').filter(part => part !== '');
     
     if (pathParts.length !== 2 || !pathParts[1].endsWith('.mp4')) {
-      return new Response('URL inválida', { status: 400 });
+      return new Response('URL inválida', { 
+        status: 400,
+        headers: { 'Content-Type': 'text/plain' }
+      });
     }
 
     const projectId = pathParts[0];
     const nomeFilme = pathParts[1];
-    const encPath = `${projectId}/${nomeFilme}`;
+    const encPath = url.pathname;
 
-    // Buscar no cache de mapeamento
-    const cache = await caches.open('filmes-map');
-    const response = await cache.match(new Request(`https://shadowgate/${encPath}`));
-    
-    if (!response) {
-      return new Response('Filme não encontrado', { status: 404 });
+    // Verificar se o projeto existe
+    const projectExists = await verifyProjectExists(projectId);
+    if (!projectExists) {
+      return new Response('Projeto não encontrado', { 
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' }
+      });
     }
 
-    const playerReal = await response.text();
+    // Buscar mapeamento no cache
+    const cache = await caches.open('filmes-map');
+    const response = await cache.match(new Request(encPath));
+    
+    if (!response) {
+      return new Response('Filme não encontrado', { 
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+
+    const data = await response.json();
+    const playerReal = data.realUrl;
+
+    // Atualizar data de último acesso
+    data.lastAccessed = new Date().toISOString();
+    await cache.put(
+      new Request(encPath),
+      new Response(JSON.stringify(data), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
 
     // Redirecionar para URL real
-    return Response.redirect(playerReal, 302);
+    return Response.redirect(playerReal, 307);
 
   } catch (error) {
-    return new Response('Erro ao processar requisição', { status: 500 });
+    return new Response('Erro interno ao processar filme', { 
+      status: 500,
+      headers: { 'Content-Type': 'text/plain' }
+    });
   }
 }
 
@@ -318,7 +360,10 @@ self.addEventListener('fetch', (event) => {
             if (event.request.mode === 'navigate') {
               return caches.match('/offline.html');
             }
-            return new Response('Offline', { status: 503 });
+            return new Response('Serviço indisponível', { 
+              status: 503,
+              headers: { 'Content-Type': 'text/plain' }
+            });
           });
       })
   );
@@ -370,4 +415,4 @@ function getProjects() {
   } catch (e) {
     return [];
   }
-}
+                    }
