@@ -60,8 +60,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 
                 return registration;
             } catch (error) {
-                console.error('SW registration failed:', error);
-                showAlert('Failed to register Service Worker', 'danger');
+                showAlert('SW registration failed:' + error, 'danger');
+                //showAlert('Failed to register Service Worker', 'danger');
                 return null;
             }
         }
