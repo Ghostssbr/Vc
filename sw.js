@@ -13,7 +13,7 @@ const CACHE_URLS = [
 const supabaseUrl = 'https://nwoswxbtlquiekyangbs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53b3N3eGJ0bHF1aWVreWFuZ2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3ODEwMjcsImV4cCI6MjA2MDM1NzAyN30.KarBv9AopQpldzGPamlj3zu9eScKltKKHH2JJblpoCE';
 
-// Função para mostrar alertas
+// Helper function to show alerts
 async function sendAlertToClient(message, type) {
   const clients = await self.clients.matchAll();
   clients.forEach(client => {
@@ -24,7 +24,15 @@ async function sendAlertToClient(message, type) {
   });
 }
 
-// Função para verificar se o projeto existe
+// Sanitize filenames for friendly URLs
+function sanitizeFilename(name) {
+  return name.toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+// Verify project exists in Supabase
 async function verifyProjectExists(projectId) {
   try {
     const response = await fetch(`${supabaseUrl}/rest/v1/project_tokens?project_id=eq.${projectId}`, {
@@ -37,17 +45,16 @@ async function verifyProjectExists(projectId) {
     const data = await response.json();
     return data && data.length > 0;
   } catch (error) {
-    await sendAlertToClient(`Erro ao verificar projeto: ${error.message}`, 'danger');
+    await sendAlertToClient(`Error verifying project: ${error.message}`, 'danger');
     return false;
   }
 }
 
-// Função para incrementar contador de requests
+// Increment request counters
 async function incrementRequestCount(projectId, endpoint) {
   try {
     const today = new Date().toISOString().split('T')[0];
     
-    // Buscar dados atuais
     const response = await fetch(`${supabaseUrl}/rest/v1/project_requests?project_id=eq.${projectId}`, {
       headers: {
         'apikey': supabaseKey,
@@ -64,7 +71,6 @@ async function incrementRequestCount(projectId, endpoint) {
       level: 1
     };
 
-    // Calcular novos valores
     const updatedData = {
       requests_today: (existingData.requests_today || 0) + 1,
       total_requests: (existingData.total_requests || 0) + 1,
@@ -77,14 +83,12 @@ async function incrementRequestCount(projectId, endpoint) {
       level: existingData.level || 1
     };
 
-    // Verificar level up
     if (updatedData.total_requests >= updatedData.level * 100) {
       updatedData.level += 1;
-      await sendAlertToClient(`Gate ${projectId} subiu para o nível ${updatedData.level}!`, 'success');
+      await sendAlertToClient(`Gate leveled up to ${updatedData.level}!`, 'success');
     }
 
-    // Atualizar no Supabase
-    const updateResponse = await fetch(`${supabaseUrl}/rest/v1/project_requests`, {
+    await fetch(`${supabaseUrl}/rest/v1/project_requests`, {
       method: 'POST',
       headers: {
         'apikey': supabaseKey,
@@ -95,11 +99,6 @@ async function incrementRequestCount(projectId, endpoint) {
       body: JSON.stringify(updatedData)
     });
 
-    if (!updateResponse.ok) {
-      throw new Error('Falha ao atualizar contador');
-    }
-
-    // Notificar clients
     const clients = await self.clients.matchAll();
     clients.forEach(client => {
       client.postMessage({
@@ -115,22 +114,11 @@ async function incrementRequestCount(projectId, endpoint) {
     });
 
   } catch (error) {
-    await sendAlertToClient(`Erro ao incrementar contador: ${error.message}`, 'danger');
+    await sendAlertToClient(`Error incrementing counter: ${error.message}`, 'danger');
   }
 }
 
-// Função para formatar nomes de filmes
-function formatarNomeFilme(nome) {
-  return nome
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .substring(0, 50);
-}
-
-// Handler para requests de /animes
+// Handle anime requests
 async function handleAnimeRequest(event) {
   try {
     const url = new URL(event.request.url);
@@ -138,14 +126,13 @@ async function handleAnimeRequest(event) {
     const projectId = pathParts[0];
     
     if (!projectId || pathParts[1] !== 'animes') {
-      return new Response(JSON.stringify({ error: 'Endpoint inválido' }), {
+      return new Response(JSON.stringify({ error: 'Invalid endpoint' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    const projectExists = await verifyProjectExists(projectId);
-    if (!projectExists) {
+    if (!await verifyProjectExists(projectId)) {
       return new Response(JSON.stringify({ error: 'Project not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
@@ -154,16 +141,14 @@ async function handleAnimeRequest(event) {
 
     await incrementRequestCount(projectId, 'animes');
 
-    const animeData = {
+    return new Response(JSON.stringify({
       projectId,
       animes: [
         { id: 1, title: "Demon Slayer", episodes: 26 },
         { id: 2, title: "Jujutsu Kaisen", episodes: 24 }
       ],
       updatedAt: new Date().toISOString()
-    };
-    
-    return new Response(JSON.stringify(animeData), {
+    }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
@@ -175,7 +160,7 @@ async function handleAnimeRequest(event) {
   }
 }
 
-// Handler para requests de /filmes
+// Handle movie API requests
 async function handleFilmesRequest(event) {
   try {
     const url = new URL(event.request.url);
@@ -183,14 +168,13 @@ async function handleFilmesRequest(event) {
     const projectId = pathParts[0];
     
     if (!projectId || pathParts[1] !== 'filmes') {
-      return new Response(JSON.stringify({ error: 'Endpoint inválido' }), {
+      return new Response(JSON.stringify({ error: 'Invalid endpoint' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    const projectExists = await verifyProjectExists(projectId);
-    if (!projectExists) {
+    if (!await verifyProjectExists(projectId)) {
       return new Response(JSON.stringify({ error: 'Project not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
@@ -199,45 +183,19 @@ async function handleFilmesRequest(event) {
 
     await incrementRequestCount(projectId, 'filmes');
 
-    // Buscar dados da API de filmes
-    const apiUrl = 'https://sigcine1.space/player_api.php?username=474912714&password=355591139&action=get_vod_streams';
-    const apiResponse = await fetch(apiUrl);
+    const apiResponse = await fetch('https://sigcine1.space/player_api.php?username=474912714&password=355591139&action=get_vod_streams');
+    if (!apiResponse.ok) throw new Error('Failed to fetch movies');
     
-    if (!apiResponse.ok) {
-      throw new Error('Falha ao buscar dados de filmes');
-    }
-
     const filmesData = await apiResponse.json();
-    const domain = new URL(event.request.url).origin;
-
-    // Criar URLs encapsuladas
-    const filmesComPlayer = filmesData.map(filme => {
-      const nomeFormatado = formatarNomeFilme(filme.name);
-      const playerEncapsulado = `${domain}/${projectId}/${nomeFormatado}.mp4`;
-      const playerReal = `http://sigcine1.space:80/movie/474912714/355591139/${filme.stream_id}.mp4`;
-      
-      // Armazenar mapeamento
-      caches.open('filmes-map').then(cache => {
-        cache.put(
-          new Request(playerEncapsulado),
-          new Response(JSON.stringify({
-            realUrl: playerReal,
-            lastAccessed: new Date().toISOString()
-          }), {
-            headers: { 'Content-Type': 'application/json' }
-          })
-        );
-      });
-
-      return {
-        ...filme,
-        player: playerEncapsulado
-      };
-    });
+    const filmesComUrls = filmesData.map(filme => ({
+      ...filme,
+      player: `http://sigcine1.space:80/movie/474912714/355591139/${filme.stream_id}.mp4`,
+      url_amigavel: `${url.origin}/${projectId}/${sanitizeFilename(filme.name)}.mp4`
+    }));
 
     return new Response(JSON.stringify({
       projectId,
-      filmes: filmesComPlayer,
+      filmes: filmesComUrls,
       updatedAt: new Date().toISOString()
     }), {
       headers: { 
@@ -247,112 +205,80 @@ async function handleFilmesRequest(event) {
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ 
-      error: error.message,
-      details: 'Falha ao processar lista de filmes'
-    }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
   }
 }
 
-// Handler para redirecionamento de filmes
-async function handleFilmeRedirect(event) {
+// Handle friendly movie URLs
+async function handleMovieStreamRequest(event) {
   try {
     const url = new URL(event.request.url);
     const pathParts = url.pathname.split('/').filter(part => part !== '');
     
     if (pathParts.length !== 2 || !pathParts[1].endsWith('.mp4')) {
-      return new Response('URL inválida', { 
-        status: 400,
-        headers: { 'Content-Type': 'text/plain' }
-      });
+      return new Response(null, { status: 404 });
     }
 
     const projectId = pathParts[0];
-    const nomeFilme = pathParts[1];
-    const encPath = url.pathname;
-
-    // Verificar se o projeto existe
-    const projectExists = await verifyProjectExists(projectId);
-    if (!projectExists) {
-      return new Response('Projeto não encontrado', { 
-        status: 404,
-        headers: { 'Content-Type': 'text/plain' }
-      });
+    if (!await verifyProjectExists(projectId)) {
+      return new Response(null, { status: 404 });
     }
 
-    // Buscar mapeamento no cache
-    const cache = await caches.open('filmes-map');
-    const response = await cache.match(new Request(encPath));
+    const filename = pathParts[1].replace('.mp4', '');
+    const apiResponse = await fetch('https://sigcine1.space/player_api.php?username=474912714&password=355591139&action=get_vod_streams');
+    if (!apiResponse.ok) throw new Error('Failed to fetch movies');
     
-    if (!response) {
-      return new Response('Filme não encontrado', { 
-        status: 404,
-        headers: { 'Content-Type': 'text/plain' }
-      });
-    }
-
-    const data = await response.json();
-    const playerReal = data.realUrl;
-
-    // Atualizar data de último acesso
-    data.lastAccessed = new Date().toISOString();
-    await cache.put(
-      new Request(encPath),
-      new Response(JSON.stringify(data), {
-        headers: { 'Content-Type': 'application/json' }
-      })
+    const filmesData = await apiResponse.json();
+    const filme = filmesData.find(f => 
+      sanitizeFilename(f.name) === sanitizeFilename(filename)
     );
 
-    // Redirecionar para URL real
-    return Response.redirect(playerReal, 307);
+    if (!filme) {
+      return new Response(null, { status: 404 });
+    }
+
+    await incrementRequestCount(projectId, 'filmes-stream');
+    return Response.redirect(
+      `http://sigcine1.space:80/movie/474912714/355591139/${filme.stream_id}.mp4`,
+      302
+    );
 
   } catch (error) {
-    return new Response('Erro interno ao processar filme', { 
-      status: 500,
-      headers: { 'Content-Type': 'text/plain' }
-    });
+    return new Response(null, { status: 500 });
   }
 }
 
-// Evento fetch principal
+// Main fetch handler
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  const pathParts = url.pathname.split('/').filter(part => part !== '');
-
-  // Requests para /projectid/animes
-  if (pathParts.length === 2 && pathParts[1] === 'animes') {
+  
+  if (url.pathname.match(/\/[^\/]+\/animes$/)) {
     event.respondWith(handleAnimeRequest(event));
     return;
   }
   
-  // Requests para /projectid/filmes
-  if (pathParts.length === 2 && pathParts[1] === 'filmes') {
+  if (url.pathname.match(/\/[^\/]+\/filmes$/)) {
     event.respondWith(handleFilmesRequest(event));
     return;
   }
 
-  // Requests para URLs de filmes encapsuladas: /projectid/nome-filme.mp4
-  if (pathParts.length === 2 && pathParts[1].endsWith('.mp4')) {
-    event.respondWith(handleFilmeRedirect(event));
+  if (url.pathname.match(/\/[^\/]+\/[^\/]+\.mp4$/)) {
+    event.respondWith(handleMovieStreamRequest(event));
     return;
   }
 
-  // Estratégia Cache-First para outros recursos
   event.respondWith(
     caches.match(event.request)
-      .then(cachedResponse => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
+      .then(cached => {
+        if (cached) return cached;
         return fetch(event.request)
           .then(response => {
-            if (response && response.status === 200) {
-              const responseToCache = response.clone();
-              caches.open(CACHE_NAME)
-                .then(cache => cache.put(event.request, responseToCache));
+            if (response.ok) {
+              const clone = response.clone();
+              caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
             }
             return response;
           })
@@ -360,59 +286,47 @@ self.addEventListener('fetch', (event) => {
             if (event.request.mode === 'navigate') {
               return caches.match('/offline.html');
             }
-            return new Response('Serviço indisponível', { 
-              status: 503,
-              headers: { 'Content-Type': 'text/plain' }
-            });
+            return new Response('Offline', { status: 503 });
           });
       })
   );
 });
 
-// Instalação do Service Worker
+// Installation
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(CACHE_URLS))
-      .then(() => sendAlertToClient('Aplicativo pronto para uso offline!', 'success'))
+      .then(() => sendAlertToClient('App ready for offline use!', 'success'))
       .catch(error => {
-        sendAlertToClient('Falha ao instalar cache: ' + error.message, 'danger');
+        sendAlertToClient(`Cache install failed: ${error.message}`, 'danger');
         throw error;
       })
   );
 });
 
-// Ativação do Service Worker
+// Activation
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cache => {
-          if (cache !== CACHE_NAME && cache !== 'filmes-map') {
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
-    .then(() => sendAlertToClient('Aplicativo atualizado!', 'success'))
-    .catch(error => {
-      sendAlertToClient('Falha ao limpar cache antigo: ' + error.message, 'danger');
-    })
+    caches.keys()
+      .then(keys => Promise.all(
+        keys.map(key => key !== CACHE_NAME ? caches.delete(key) : null)
+      ))
+      .then(() => sendAlertToClient('Service Worker activated!', 'success'))
+      .catch(error => {
+        sendAlertToClient(`Activation failed: ${error.message}`, 'danger');
+      })
   );
 });
 
-// Mensagens do Service Worker
+// Message handling
 self.addEventListener('message', (event) => {
   if (event.data.type === 'GET_PROJECTS') {
-    event.ports[0].postMessage(getProjects());
+    try {
+      const projects = JSON.parse(localStorage.getItem('shadowGateProjects4')) || [];
+      event.ports[0].postMessage(projects);
+    } catch (e) {
+      event.ports[0].postMessage([]);
+    }
   }
 });
-
-// Função auxiliar para obter projetos
-function getProjects() {
-  try {
-    return JSON.parse(localStorage.getItem('shadowGateProjects4')) || [];
-  } catch (e) {
-    return [];
-  }
-                    }
