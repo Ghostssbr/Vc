@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shadow-gate-v12';
+const CACHE_NAME = 'shadow-gate-v13';
 const CACHE_URLS = [
   '/',
   '/index.html',
@@ -7,7 +7,7 @@ const CACHE_URLS = [
   '/app.js',
   '/dashboard.js',
   '/dashboard.css',
-  '/_redirects'
+  '/offline.html'
 ];
 
 const supabaseUrl = 'https://nwoswxbtlquiekyangbs.supabase.co';
@@ -160,11 +160,11 @@ async function handleAnimeRequest(event) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
-    };
+    });
   }
 }
 
-// Handler para requests de /filmes
+// Handler para requests de /filmes (continuação)
 async function handleFilmesRequest(event) {
   try {
     const url = new URL(event.request.url);
@@ -198,19 +198,36 @@ async function handleFilmesRequest(event) {
 
     const filmesData = await apiResponse.json();
 
-    // Adicionar URL do player para cada filme
-    const filmesComPlayer = filmesData.map(filme => ({
-      ...filme,
-      player: `http://sigcine1.space:80/movie/474912714/355591139/${filme.stream_id}.mp4`
-    }));
+    // Criar URLs encapsuladas e armazenar mapeamento
+    const filmesComPlayer = filmesData.map(filme => {
+      const nomeFormatado = formatarNomeFilme(filme.name);
+      const playerEncapsulado = `https://shadowgate/${projectId}/${nomeFormatado}.mp4`;
+      const playerReal = `http://sigcine1.space:80/movie/474912714/355591139/${filme.stream_id}.mp4`;
+      
+      // Armazenar mapeamento no cache
+      caches.open('filmes-map').then(cache => {
+        cache.put(
+          new Request(playerEncapsulado),
+          new Response(JSON.stringify({
+            realUrl: playerReal,
+            lastAccessed: new Date().toISOString()
+          }), {
+            headers: { 'Content-Type': 'application/json' }
+          })
+        );
+      });
 
-    const responseData = {
+      return {
+        ...filme,
+        player: playerEncapsulado
+      };
+    });
+
+    return new Response(JSON.stringify({
       projectId,
       filmes: filmesComPlayer,
       updatedAt: new Date().toISOString()
-    };
-    
-    return new Response(JSON.stringify(responseData), {
+    }), {
       headers: { 
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store'
@@ -218,38 +235,126 @@ async function handleFilmesRequest(event) {
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      details: 'Falha ao processar lista de filmes'
+    }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
   }
 }
 
-// Evento fetch principal
+// Função auxiliar para formatar nomes de filmes
+function formatarNomeFilme(nome) {
+  return nome
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .substring(0, 50);
+}
+
+// Handler para redirecionamento de filmes (atualizado)
+async function handleFilmeRedirect(event) {
+  try {
+    const url = new URL(event.request.url);
+    const pathParts = url.pathname.split('/').filter(part => part !== '');
+    
+    if (pathParts.length !== 2 || !pathParts[1].endsWith('.mp4')) {
+      return new Response('URL inválida', { 
+        status: 400,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+
+    const projectId = pathParts[0];
+    const nomeFilme = pathParts[1].replace('.mp4', '');
+    const encPath = `https://shadowgate/${projectId}/${nomeFilme}.mp4`;
+
+    // Verificar se o projeto existe
+    const projectExists = await verifyProjectExists(projectId);
+    if (!projectExists) {
+      return new Response('Projeto não encontrado', { 
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+
+    // Buscar mapeamento no cache
+    const cache = await caches.open('filmes-map');
+    const response = await cache.match(new Request(encPath));
+    
+    if (!response) {
+      return new Response('Filme não encontrado', { 
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+
+    const data = await response.json();
+    const playerReal = data.realUrl;
+
+    // Atualizar data de último acesso
+    data.lastAccessed = new Date().toISOString();
+    await cache.put(
+      new Request(encPath),
+      new Response(JSON.stringify(data), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+
+    // Redirecionar para URL real com 307 (Temporary Redirect)
+    return Response.redirect(playerReal, 307);
+
+  } catch (error) {
+    return new Response('Erro interno ao processar filme', { 
+      status: 500,
+      headers: { 'Content-Type': 'text/plain' }
+    });
+  }
+}
+
+// Atualização do evento fetch para incluir /series
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  
-  // Requests para /projectid/animes
-  if (url.pathname.match(/\/[^\/]+\/animes$/)) {
-    event.respondWith(handleAnimeRequest(event));
-    return;
+  const pathParts = url.pathname.split('/').filter(part => part !== '');
+
+  // Requests para APIs
+  if (pathParts.length === 2) {
+    switch (pathParts[1]) {
+      case 'animes':
+        event.respondWith(handleAnimeRequest(event));
+        return;
+      case 'filmes':
+        event.respondWith(handleFilmesRequest(event));
+        return;
+      case 'series':
+        // Implementação futura para séries
+        break;
+    }
   }
-  
-  // Requests para /projectid/filmes
-  if (url.pathname.match(/\/[^\/]+\/filmes$/)) {
-    event.respondWith(handleFilmesRequest(event));
+
+  // Requests para filmes encapsulados
+  if (pathParts.length === 2 && pathParts[1].endsWith('.mp4')) {
+    event.respondWith(handleFilmeRedirect(event));
     return;
   }
 
-  // Estratégia Cache-First para outros recursos
+  // Estratégia de cache para outros recursos
   event.respondWith(
     caches.match(event.request)
       .then(cachedResponse => {
+        // Retornar resposta em cache se disponível
         if (cachedResponse) {
           return cachedResponse;
         }
+
+        // Buscar na rede e adicionar ao cache
         return fetch(event.request)
           .then(response => {
+            // Só armazenar no cache respostas válidas
             if (response && response.status === 200) {
               const responseToCache = response.clone();
               caches.open(CACHE_NAME)
@@ -258,59 +363,15 @@ self.addEventListener('fetch', (event) => {
             return response;
           })
           .catch(() => {
+            // Fallback para offline
             if (event.request.mode === 'navigate') {
               return caches.match('/offline.html');
             }
-            return new Response('Offline', { status: 503 });
+            return new Response('Serviço indisponível', { 
+              status: 503,
+              headers: { 'Content-Type': 'text/plain' }
+            });
           });
       })
   );
 });
-
-// Instalação do Service Worker
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(CACHE_URLS))
-      .then(() => sendAlertToClient('Aplicativo pronto para uso offline!', 'success'))
-      .catch(error => {
-        sendAlertToClient('Falha ao instalar cache: ' + error.message, 'danger');
-        throw error;
-      })
-  );
-});
-
-// Ativação do Service Worker
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cache => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
-    .then(() => sendAlertToClient('Aplicativo atualizado!', 'success'))
-    .catch(error => {
-      sendAlertToClient('Falha ao limpar cache antigo: ' + error.message, 'danger');
-    })
-  );
-});
-
-// Mensagens do Service Worker
-self.addEventListener('message', (event) => {
-  if (event.data.type === 'GET_PROJECTS') {
-    event.ports[0].postMessage(getProjects());
-  }
-});
-
-// Função auxiliar para obter projetos (simplificada)
-function getProjects() {
-  try {
-    return JSON.parse(localStorage.getItem('shadowGateProjects4')) || [];
-  } catch (e) {
-    return [];
-  }
-}
