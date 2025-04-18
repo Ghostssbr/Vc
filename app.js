@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     scope: '/'
                 });
 
-                showAlert('Service Worker registrado com sucesso', 'success');
+                showAlert('Service2 Worker registrado com sucesso', 'success');
 
                 navigator.serviceWorker.addEventListener('message', event => {
                     if (event.data.type === 'GET_PROJECTS') {
