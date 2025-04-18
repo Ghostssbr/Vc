@@ -2,6 +2,17 @@ const CACHE_NAME = 'shadow-gate-v11';
 const supabaseUrl = 'https://nwoswxbtlquiekyangbs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53b3N3eGJ0bHF1aWVreWFuZ2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3ODEwMjcsImV4cCI6MjA2MDM1NzAyN30.KarBv9AopQpldzGPamlj3zu9eScKltKKHH2JJblpoCE';
 
+// Função para mostrar alertas
+async function showAlert(message, type) {
+    const clients = await self.clients.matchAll();
+    clients.forEach(client => {
+        client.postMessage({
+            type: 'SHOW_ALERT',
+            payload: { message, type }
+        });
+    });
+}
+
 // Função para verificar se o projeto existe no Supabase
 async function verifyProjectExists(projectId) {
     try {
@@ -15,7 +26,7 @@ async function verifyProjectExists(projectId) {
         const data = await response.json();
         return data && data.length > 0;
     } catch (error) {
-        console.error('Error verifying project:', error);
+        await showAlert(`Erro ao verificar projeto: ${error.message}`, 'danger');
         return false;
     }
 }
@@ -59,6 +70,7 @@ async function incrementRequestCount(projectId) {
         const currentLevel = existingData.level || 1;
         if (updatedData.total_requests >= currentLevel * 100) {
             updatedData.level = currentLevel + 1;
+            await showAlert(`Gate ${projectId} subiu para o nível ${updatedData.level}!`, 'success');
         }
 
         // 3. Atualizar no Supabase
@@ -90,7 +102,7 @@ async function incrementRequestCount(projectId) {
         });
 
     } catch (error) {
-        console.error('Error incrementing request count:', error);
+        await showAlert(`Erro ao incrementar contador: ${error.message}`, 'danger');
     }
 }
 
@@ -102,6 +114,7 @@ async function handleAnimeRequest(event) {
         const projectId = pathParts[0];
         
         if (!projectId || pathParts[1] !== 'animes') {
+            await showAlert('Endpoint inválido para /animes', 'warning');
             return new Response(JSON.stringify({ error: 'Invalid endpoint' }), {
                 status: 400,
                 headers: { 'Content-Type': 'application/json' }
@@ -111,6 +124,7 @@ async function handleAnimeRequest(event) {
         // Verificar se o projeto existe
         const projectExists = await verifyProjectExists(projectId);
         if (!projectExists) {
+            await showAlert(`Projeto ${projectId} não encontrado`, 'danger');
             return new Response(JSON.stringify({ error: 'Project not found' }), {
                 status: 404,
                 headers: { 'Content-Type': 'application/json' }
@@ -135,10 +149,11 @@ async function handleAnimeRequest(event) {
         });
 
     } catch (error) {
+        await showAlert(`Erro no endpoint /animes: ${error.message}`, 'danger');
         return new Response(JSON.stringify({ error: error.message }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
-        };
+        });
     }
 }
 
@@ -155,11 +170,32 @@ self.addEventListener('fetch', (event) => {
     // Lógica padrão para outros requests
     event.respondWith(
         caches.match(event.request)
-            .then(cachedResponse => cachedResponse || fetch(event.request))
+            .then(cachedResponse => {
+                if (cachedResponse) {
+                    return cachedResponse;
+                }
+                return fetch(event.request)
+                    .then(response => {
+                        // Cache apenas respostas válidas
+                        if (response.ok) {
+                            const cacheCopy = response.clone();
+                            caches.open(CACHE_NAME)
+                                .then(cache => cache.put(event.request, cacheCopy));
+                        }
+                        return response;
+                    })
+                    .catch(async () => {
+                        await showAlert('Falha na requisição - Modo offline', 'warning');
+                        return new Response('Offline - Recursos não disponíveis', {
+                            status: 503,
+                            headers: { 'Content-Type': 'text/plain' }
+                        });
+                    });
+            })
     );
 });
 
-// Restante do Service Worker (install, activate, etc...)
+// Instalação do Service Worker
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME)
@@ -172,9 +208,15 @@ self.addEventListener('install', (event) => {
                 '/dashboard.js',
                 '/dashboard.css'
             ]))
+            .then(() => showAlert('Cache instalado com sucesso!', 'success'))
+            .catch(async (error) => {
+                await showAlert(`Falha na instalação do cache: ${error.message}`, 'danger');
+                throw error;
+            })
     );
 });
 
+// Ativação do Service Worker
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then(cacheNames => {
@@ -186,5 +228,9 @@ self.addEventListener('activate', (event) => {
                 })
             );
         })
+        .then(() => showAlert('Service Worker ativado!', 'success'))
+        .catch(async (error) => {
+            await showAlert(`Falha na ativação: ${error.message}`, 'danger');
+        })
     );
-}); troque os log pra showAlert 
+});
