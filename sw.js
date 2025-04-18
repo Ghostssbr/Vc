@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             try {
-                const registration = await navigator.serviceWorker.register('sw.js', {
+                const registration = await navigator.serviceWorker.register('/sw.js', {
                     scope: '/'
                 });
 
