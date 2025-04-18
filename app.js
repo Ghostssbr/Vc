@@ -4,6 +4,24 @@ document.addEventListener('DOMContentLoaded', async function() {
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53b3N3eGJ0bHF1aWVreWFuZ2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3ODEwMjcsImV4cCI6MjA2MDM1NzAyN30.KarBv9AopQpldzGPamlj3zu9eScKltKKHH2JJblpoCE';
     let supabase;
 
+    // Função para mostrar alertas
+    function showAlert(message, type) {
+        const alert = document.createElement('div');
+        alert.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg text-white font-semibold tracking-wider z-50 ${
+            type === 'success' ? 'bg-green-600' : 
+            type === 'danger' ? 'bg-red-600' :
+            type === 'warning' ? 'bg-yellow-600' :
+            'bg-blue-600'
+        }`;
+        alert.textContent = message;
+        document.body.appendChild(alert);
+        
+        setTimeout(() => {
+            alert.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+            setTimeout(() => alert.remove(), 500);
+        }, 3000);
+    }
+
     // Função para verificar e corrigir dados
     function getProjects() {
         try {
@@ -11,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (!Array.isArray(projects)) throw new Error('Dados inválidos');
             return projects.filter(p => p && p.id);
         } catch (e) {
-            console.error('Corrigindo dados corrompidos...', e);
+            showAlert('Corrigindo dados corrompidos...', 'warning');
             localStorage.setItem('shadowGateProjects4', JSON.stringify([]));
             return [];
         }
@@ -32,50 +50,53 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('shadowGateProjects4', JSON.stringify(projects));
     }
 
-    updateDailyCounters();
+    // Inicialização
+    async function initialize() {
+        updateDailyCounters();
 
-    // Service Worker
-    if ('serviceWorker' in navigator) {
+        // Conexão com Supabase
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js', {
-                scope: '/'
-            });
-            
-            showAlert('j!', 'info');
+            supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+            window.supabase = supabase;
+            showAlert('Conectado ao banco de dados', 'success');
+        } catch (error) {
+            showAlert('Erro ao conectar com o banco de dados', 'danger');
+        }
 
-            navigator.serviceWorker.addEventListener('message', event => {
-                if (event.data.type === 'GET_PROJECTS') {
-                    event.ports[0].postMessage(getProjects());
-                }
-            });
+        // Registrar Service Worker
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.register('/sw.js', {
+                    scope: '/'
+                });
 
-            registration.addEventListener('updatefound', () => {
-                const newWorker = registration.installing;
-                newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'activated') {
-                        showAlert('Nova versão disponível!', 'info');
-                        setTimeout(() => window.location.reload(), 1500);
+                showAlert('Service Worker registrado com sucesso', 'success');
+
+                navigator.serviceWorker.addEventListener('message', event => {
+                    if (event.data.type === 'GET_PROJECTS') {
+                        event.ports[0].postMessage(getProjects());
                     }
                 });
-            });
-        } catch (error) {
-            console.error('SW registration failed:', error);
-            showAlert('Falha ao registrar Service Worker: ' + error, 'danger');
+
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'activated') {
+                            showAlert('Nova versão disponível! Atualizando...', 'info');
+                            setTimeout(() => window.location.reload(), 1500);
+                        }
+                    });
+                });
+            } catch (error) {
+                showAlert(`Falha ao registrar Service Worker: ${error.message}`, 'danger');
+            }
         }
+
+        loadProjects();
+        setupForm();
     }
 
-    // Conexão com Supabase
-    try {
-        supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-        window.supabase = supabase;
-    } catch (error) {
-        console.error('Supabase error:', error);
-        showAlert('Erro ao conectar com o banco de dados', 'danger');
-    }
-
-    loadProjects();
-    setupForm();
-
+    // Carregar projetos
     function loadProjects() {
         const container = document.getElementById('projectsContainer');
         const noProjects = document.getElementById('noProjects');
@@ -120,6 +141,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
+    // Configurar formulário
     function setupForm() {
         document.getElementById('newProjectForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -152,7 +174,6 @@ document.addEventListener('DOMContentLoaded', async function() {
             try {
                 const projects = getProjects();
                 
-                // Verificar duplicatas
                 if (projects.some(p => p.id === idProject)) {
                     throw new Error('Projeto já existe');
                 }
@@ -188,14 +209,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                     if (requestError) throw requestError;
                 }
                 
-                showAlert('Projeto criado com sucesso!', 'success');
+                showAlert('Projeto criado com sucesso! Redirecionando...', 'success');
                 setTimeout(() => {
                     window.location.href = `dashboard.html?project=${encodeURIComponent(idProject)}`;
                 }, 1500);
                 
             } catch (error) {
-                console.error('Erro ao criar projeto:', error);
-                showAlert(`Erro: ${error.message}`, 'danger');
+                showAlert(`Erro ao criar projeto: ${error.message}`, 'danger');
             }
         });
     }
@@ -214,25 +234,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             const options = { year: 'numeric', month: 'short', day: 'numeric' };
             return new Date(dateString).toLocaleDateString('en-US', options);
         } catch (e) {
-            console.error('Erro ao formatar data:', e);
+            showAlert('Erro ao formatar data', 'warning');
             return 'Data inválida';
         }
     }
 
-    function showAlert(message, type) {
-        const alert = document.createElement('div');
-        alert.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg text-white font-semibold tracking-wider z-50 ${
-            type === 'success' ? 'bg-green-600' : 
-            type === 'danger' ? 'bg-red-600' :
-            type === 'warning' ? 'bg-yellow-600' :
-            'bg-blue-600'
-        }`;
-        alert.textContent = message;
-        document.body.appendChild(alert);
-        
-        setTimeout(() => {
-            alert.classList.add('opacity-0', 'transition-opacity', 'duration-500');
-            setTimeout(() => alert.remove(), 500);
-        }, 3000);
-    }
+    // Iniciar a aplicação
+    initialize();
 });
