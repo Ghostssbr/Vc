@@ -50,50 +50,60 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('shadowGateProjects4', JSON.stringify(projects));
     }
 
-    // Inicialização
-    async function initialize() {
-        updateDailyCounters();
-
-        // Conexão com Supabase
-        try {
-            supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-            window.supabase = supabase;
-            showAlert('Conectado ao banco de dados', 'success');
-        } catch (error) {
-            showAlert('Erro ao conectar com o banco de dados', 'danger');
-        }
-
-        // Registrar Service Worker
+    // Registrar Service Worker
+    function registerServiceWorker() {
         if ('serviceWorker' in navigator) {
-            try {
-                const registration = await navigator.serviceWorker.register('/sw.js', {
-                    scope: '/'
-                });
-
-                showAlert('Service2 Worker registrado com sucesso', 'success');
-
-                navigator.serviceWorker.addEventListener('message', event => {
-                    if (event.data.type === 'GET_PROJECTS') {
-                        event.ports[0].postMessage(getProjects());
-                    }
-                });
-
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'activated') {
-                            showAlert('Nova versão disponível! Atualizando...', 'info');
-                            setTimeout(() => window.location.reload(), 1500);
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        showAlert('Aplicativo instalado para uso offline!', 'success');
+                        
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'activated') {
+                                    showAlert('Nova versão disponível! Recarregando...', 'info');
+                                    setTimeout(() => window.location.reload(), 2000);
+                                }
+                            });
+                        });
+                    })
+                    .catch(error => {
+                        let errorMessage = 'Falha no registro do Service Worker';
+                        
+                        if (error.message.includes('MIME type')) {
+                            errorMessage = 'Erro: O Service Worker deve ser servido como JavaScript';
+                        } else if (error.message.includes('script evaluation failed')) {
+                            errorMessage = 'Erro no código do Service Worker';
+                        } else {
+                            errorMessage = `Erro: ${error.message}`;
                         }
+                        
+                        showAlert(errorMessage, 'danger');
+                        
+                        // Verificação adicional do arquivo SW
+                        fetch('/sw.js')
+                            .then(res => {
+                                if (!res.ok) {
+                                    showAlert(`Arquivo SW não encontrado (status ${res.status})`, 'danger');
+                                    return;
+                                }
+                                return res.text().then(text => {
+                                    if (text.length === 0) {
+                                        showAlert('O arquivo SW está vazio', 'danger');
+                                    } else if (!text.includes('self.addEventListener')) {
+                                        showAlert('Conteúdo inválido no SW', 'warning');
+                                    }
+                                });
+                            })
+                            .catch(err => {
+                                showAlert(`Não foi possível acessar o SW: ${err.message}`, 'danger');
+                            });
                     });
-                });
-            } catch (error) {
-                showAlert(`Falha ao registrar Service Worker: ${error.message}`, 'danger');
-            }
+            });
+        } else {
+            showAlert('Seu navegador não suporta recursos offline', 'warning');
         }
-
-        loadProjects();
-        setupForm();
     }
 
     // Carregar projetos
@@ -181,33 +191,36 @@ document.addEventListener('DOMContentLoaded', async function() {
                 projects.push(newProject);
                 localStorage.setItem('shadowGateProjects4', JSON.stringify(projects));
                 
-                // Supabase - Criar registro nas duas tabelas
-                if (window.supabase) {
-                    // Tabela project_tokens
-                    const { error: tokenError } = await supabase
-                        .from('project_tokens')
-                        .insert([{
-                            project_id: idProject,
-                            created_at: new Date().toISOString()
-                        }]);
-                    
-                    if (tokenError) throw tokenError;
-                    
-                    // Tabela project_requests
-                    const { error: requestError } = await supabase
-                        .from('project_requests')
-                        .insert([{
-                            project_id: idProject,
-                            requests_today: 0,
-                            total_requests: 0,
-                            last_request_date: today,
-                            daily_requests: { [today]: 0 },
-                            level: 1,
-                            updated_at: new Date().toISOString()
-                        }]);
-                    
-                    if (requestError) throw requestError;
+                // Conexão com Supabase
+                if (!supabase) {
+                    supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+                    window.supabase = supabase;
                 }
+                
+                // Tabela project_tokens
+                const { error: tokenError } = await supabase
+                    .from('project_tokens')
+                    .insert([{
+                        project_id: idProject,
+                        created_at: new Date().toISOString()
+                    }]);
+                
+                if (tokenError) throw tokenError;
+                
+                // Tabela project_requests
+                const { error: requestError } = await supabase
+                    .from('project_requests')
+                    .insert([{
+                        project_id: idProject,
+                        requests_today: 0,
+                        total_requests: 0,
+                        last_request_date: today,
+                        daily_requests: { [today]: 0 },
+                        level: 1,
+                        updated_at: new Date().toISOString()
+                    }]);
+                
+                if (requestError) throw requestError;
                 
                 showAlert('Projeto criado com sucesso! Redirecionando...', 'success');
                 setTimeout(() => {
@@ -239,6 +252,21 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Iniciar a aplicação
+    // Inicialização da aplicação
+    async function initialize() {
+        updateDailyCounters();
+        registerServiceWorker();
+        
+        try {
+            supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+            window.supabase = supabase;
+        } catch (error) {
+            showAlert('Erro ao conectar com o banco de dados', 'danger');
+        }
+
+        loadProjects();
+        setupForm();
+    }
+
     initialize();
 });
