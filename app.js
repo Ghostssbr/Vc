@@ -4,7 +4,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53b3N3eGJ0bHF1aWVreWFuZ2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3ODEwMjcsImV4cCI6MjA2MDM1NzAyN30.KarBv9AopQpldzGPamlj3zu9eScKltKKHH2JJblpoCE';
     let supabase;
 
-    // Função para mostrar alertas
     function showAlert(message, type) {
         const alert = document.createElement('div');
         alert.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg text-white font-semibold tracking-wider z-50 ${
@@ -22,7 +21,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         }, 3000);
     }
 
-    // Função para verificar e corrigir dados
     function getProjects() {
         try {
             const projects = JSON.parse(localStorage.getItem('shadowGateProjects4')) || [];
@@ -35,7 +33,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Atualizar contadores diários
     function updateDailyCounters() {
         const today = new Date().toISOString().split('T')[0];
         const projects = getProjects().map(project => ({
@@ -50,15 +47,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('shadowGateProjects4', JSON.stringify(projects));
     }
 
-    // Função para registrar Service Worker com retry
     async function registerServiceWorkerWithRetry() {
         if (!('serviceWorker' in navigator)) return;
 
-        // Espera 10 segundos antes de começar a tentar registrar
         await new Promise(resolve => setTimeout(resolve, 10000));
 
         const maxAttempts = 10;
-        const retryDelay = 5000; // 5 segundos entre tentativas
+        const retryDelay = 5000;
         let attempts = 0;
 
         const tryRegister = async () => {
@@ -86,7 +81,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     });
                 });
                 
-                return true; // Sucesso
+                return true;
             } catch (error) {
                 if (attempts < maxAttempts) {
                     showAlert(`Tentativa ${attempts}/${maxAttempts}: Falha ao registrar Service Worker. Tentando novamente em ${retryDelay/1000} segundos...`, 'warning');
@@ -102,27 +97,47 @@ document.addEventListener('DOMContentLoaded', async function() {
         return tryRegister();
     }
 
-    // Inicialização
     async function initialize() {
         updateDailyCounters();
 
-        // Conexão com Supabase
         try {
             supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
             window.supabase = supabase;
-            showAlert('Conectado ao banco de dados', 'success');
+            
+            // Testar conexão
+            const { data, error } = await supabase
+                .from('project_tokens')
+                .select('*')
+                .limit(1);
+            
+            if (error) throw error;
+            
+            showAlert('✅ Conexão com o banco de dados estabelecida', 'success');
         } catch (error) {
-            showAlert('Erro ao conectar com o banco de dados', 'danger');
+            console.error('Erro na conexão com Supabase:', error);
+            showAlert('⚠️ Erro ao conectar com o banco de dados', 'danger');
+            
+            setTimeout(async () => {
+                try {
+                    const { data, error } = await supabase
+                        .from('project_tokens')
+                        .select('*')
+                        .limit(1);
+                    
+                    if (!error) {
+                        showAlert('✅ Conexão restabelecida', 'success');
+                    }
+                } catch (e) {
+                    console.error('Falha na reconexão:', e);
+                }
+            }, 30000);
         }
 
-        // Registrar Service Worker com retry
         registerServiceWorkerWithRetry();
-
         loadProjects();
         setupForm();
     }
 
-    // Carregar projetos
     function loadProjects() {
         const container = document.getElementById('projectsContainer');
         const noProjects = document.getElementById('noProjects');
@@ -167,7 +182,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // Configurar formulário
     function setupForm() {
         document.getElementById('newProjectForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -207,9 +221,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 projects.push(newProject);
                 localStorage.setItem('shadowGateProjects4', JSON.stringify(projects));
                 
-                // Supabase - Criar registro nas duas tabelas
                 if (window.supabase) {
-                    // Tabela project_tokens
                     const { error: tokenError } = await supabase
                         .from('project_tokens')
                         .insert([{
@@ -219,7 +231,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                     
                     if (tokenError) throw tokenError;
                     
-                    // Tabela project_requests
                     const { error: requestError } = await supabase
                         .from('project_requests')
                         .insert([{
@@ -246,7 +257,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // Funções auxiliares
     function generateActivityData() {
         return {
             '7d': Array.from({length: 7}, () => Math.floor(Math.random() * 50) + 10),
@@ -265,6 +275,5 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Iniciar a aplicação
     initialize();
 });
