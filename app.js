@@ -50,21 +50,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         localStorage.setItem('shadowGateProjects4', JSON.stringify(projects));
     }
 
-    // Inicialização
-    async function initialize() {
-        updateDailyCounters();
+    // Função para registrar Service Worker com retry
+    async function registerServiceWorkerWithRetry() {
+        if (!('serviceWorker' in navigator)) return;
 
-        // Conexão com Supabase
-        try {
-            supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-            window.supabase = supabase;
-            showAlert('Conectado ao banco de dados', 'success');
-        } catch (error) {
-            showAlert('Erro ao conectar com o banco de dados', 'danger');
-        }
+        // Espera 10 segundos antes de começar a tentar registrar
+        await new Promise(resolve => setTimeout(resolve, 10000));
 
-        // Registrar Service Worker
-        if ('serviceWorker' in navigator) {
+        const maxAttempts = 10;
+        const retryDelay = 5000; // 5 segundos entre tentativas
+        let attempts = 0;
+
+        const tryRegister = async () => {
+            attempts++;
             try {
                 const registration = await navigator.serviceWorker.register('/sw.js', {
                     scope: '/'
@@ -87,10 +85,38 @@ document.addEventListener('DOMContentLoaded', async function() {
                         }
                     });
                 });
+                
+                return true; // Sucesso
             } catch (error) {
-                showAlert(`Falha ao registrar Service Worker: ${error.message}`, 'danger');
+                if (attempts < maxAttempts) {
+                    showAlert(`Tentativa ${attempts}/${maxAttempts}: Falha ao registrar Service Worker. Tentando novamente em ${retryDelay/1000} segundos...`, 'warning');
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                    return tryRegister();
+                } else {
+                    showAlert(`Falha ao registrar Service Worker após ${maxAttempts} tentativas: ${error.message}`, 'danger');
+                    return false;
+                }
             }
+        };
+
+        return tryRegister();
+    }
+
+    // Inicialização
+    async function initialize() {
+        updateDailyCounters();
+
+        // Conexão com Supabase
+        try {
+            supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+            window.supabase = supabase;
+            showAlert('Conectado ao banco de dados', 'success');
+        } catch (error) {
+            showAlert('Erro ao conectar com o banco de dados', 'danger');
         }
+
+        // Registrar Service Worker com retry
+        registerServiceWorkerWithRetry();
 
         loadProjects();
         setupForm();
