@@ -3,205 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shadow Gate - API Manager</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#3A6BFF',
-                        'primary-dark': '#1E40AF',
-                        success: '#10B981',
-                        info: '#3A6BFF',
-                        warning: '#F59E0B',
-                        danger: '#EF4444',
-                        dark: '#0F172A',
-                        'dark-surface': '#1E293B',
-                        'dark-border': '#334155',
-                        'solo-blue': '#3A6BFF',
-                        'solo-dark': '#0F172A',
-                        'solo-accent': '#7C3AED'
-                    },
-                    fontFamily: {
-                        'solo': ['"Rajdhani"', 'sans-serif']
-                    },
-                    boxShadow: {
-                        'solo': '0 4px 6px -1px rgba(58, 107, 255, 0.2), 0 2px 4px -1px rgba(58, 107, 255, 0.06)',
-                        'solo-inner': 'inset 0 2px 4px 0 rgba(58, 107, 255, 0.1)'
-                    }
-                }
-            }
-        }
-        document.documentElement.classList.add('dark');
-    </script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <title>Anime JSON Generator</title>
     <style>
         body {
-            font-family: 'Rajdhani', sans-serif;
-            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHBhdHRlcm5UcmFuc2Zvcm09InJvdGF0ZSg0NSkiPjxyZWN0IHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgZmlsbD0icmdiYSgyMCwgNTgsIDEwMCwgMC4wNSkiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMwRjE3MkEiLz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI3BhdHRlcm4pIi8+PC9zdmc+');
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
         }
-        
-        .project-card {
-            transition: all 0.3s ease;
-            border: 1px solid rgba(58, 107, 255, 0.2);
-            position: relative;
-            overflow: hidden;
+        h1 {
+            color: #6a5acd;
+            text-align: center;
         }
-        
-        .project-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: linear-gradient(90deg, #3A6BFF, #7C3AED);
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-        
-        .project-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 15px -3px rgba(58, 107, 255, 0.2), 0 4px 6px -2px rgba(58, 107, 255, 0.1);
+        .info {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f0f8ff;
+            border-radius: 5px;
+            border-left: 4px solid #6a5acd;
         }
-        
-        .glow-button {
-            position: relative;
-            overflow: hidden;
+        pre {
+            background-color: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
         }
-        
-        .glow-button::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(58, 107, 255, 0.4), transparent);
-            transform: rotate(45deg);
-            transition: all 0.6s ease;
-            opacity: 0;
+        .try-it {
+            margin-top: 30px;
         }
-        
-        .glow-button:hover::before {
-            animation: glow 1.5s ease infinite;
-            opacity: 1;
+        a {
+            color: #6a5acd;
+            text-decoration: none;
+            font-weight: bold;
         }
-        
-        @keyframes glow {
-            0% { left: -50%; }
-            100% { left: 150%; }
-        }
-        
-        .status-badge {
-            position: relative;
-            padding-left: 1.25rem;
-        }
-        
-        .status-badge::before {
-            content: '';
-            position: absolute;
-            left: 0.5rem;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 0.5rem;
-            height: 0.5rem;
-            border-radius: 50%;
-            background-color: currentColor;
+        a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
-<body class="dark:bg-solo-dark min-h-screen font-solo">
-    <header class="bg-gradient-to-r from-solo-dark to-primary-dark p-3 text-white shadow-lg">
-        <div class="flex justify-between items-center">
-            <div class="flex items-center">
-                <i class="bi bi-gate text-2xl text-solo-blue"></i>
-                <span class="ml-2 font-bold text-xl tracking-wider">SHADOW GATE</span>
-            </div>
-            <div>
-                <i class="bi bi-list text-2xl"></i>
-            </div>
-        </div>
-    </header>
-
-    <main class="p-4 pb-20">
-        <div class="mb-6">
-            <h1 class="text-2xl font-bold text-white tracking-wide">MY DUNGEONS</h1>
-            <p class="text-xs text-gray-400 tracking-wider">MANAGE YOUR SHADOW PORTALS</p>
+<body>
+    <div class="container">
+        <h1>Anime JSON Generator</h1>
+        
+        <div class="info">
+            <p>Para receber um JSON de animes, acesse uma URL no formato:</p>
+            <code>/qualquer-numero/animes</code>
+            <p>Por exemplo: <a href="/123/animes" id="example-link">/123/animes</a></p>
         </div>
 
-        <!-- Criar novo projeto -->
-        <div class="bg-dark-surface p-4 rounded-lg mb-6 border border-dark-border shadow-lg">
-            <h2 class="text-lg font-bold text-white mb-4 tracking-wider">
-                <i class="bi bi-plus-circle text-solo-blue mr-2"></i>
-                CREATE NEW GATE
-            </h2>
+        <div id="json-display" style="display: none;">
+            <h2>Resultado:</h2>
+            <pre id="json-output"></pre>
+        </div>
+
+        <div class="try-it">
+            <p>Ou tente aqui mesmo:</p>
+            <button id="try-button">Gerar JSON Aleatório</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Verifica a URL atual
+            checkUrl();
             
-            <form id="newProjectForm">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-300 mb-2 tracking-wider">GATE NAME</label>
-                        <input type="text" id="projectName" placeholder="Ex: Shadow API" class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-solo-blue focus:ring-1 focus:ring-solo-blue outline-none transition">
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-300 mb-2 tracking-wider">SPREADSHEET URL</label>
-                        <input type="text" id="spreadsheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-solo-blue focus:ring-1 focus:ring-solo-blue outline-none transition">
-                    </div>
-                </div>
+            // Configura o link de exemplo
+            document.getElementById('example-link').addEventListener('click', function(e) {
+                e.preventDefault();
+                window.history.pushState({}, '', '/123/animes');
+                checkUrl();
+            });
+            
+            // Configura o botão de teste
+            document.getElementById('try-button').addEventListener('click', function() {
+                const randomNum = Math.floor(Math.random() * 1000);
+                window.history.pushState({}, '', `/${randomNum}/animes`);
+                checkUrl();
+            });
+            
+            // Monitora mudanças na URL
+            window.addEventListener('popstate', checkUrl);
+        });
+        
+        function checkUrl() {
+            const path = window.location.pathname;
+            const match = path.match(/\/(\d+)\/animes/);
+            
+            const jsonDisplay = document.getElementById('json-display');
+            const jsonOutput = document.getElementById('json-output');
+            
+            if (match) {
+                const number = match[1];
+                const animeData = generateAnimeData(number);
                 
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-300 mb-2 tracking-wider">DESCRIPTION (OPTIONAL)</label>
-                    <textarea id="projectDescription" rows="2" placeholder="Describe your shadow gate..." class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-solo-blue focus:ring-1 focus:ring-solo-blue outline-none transition"></textarea>
-                </div>
-                
-                <div class="flex justify-end">
-                    <button type="submit" class="glow-button bg-gradient-to-r from-solo-blue to-solo-accent text-white px-6 py-3 rounded-lg hover:opacity-90 flex items-center font-semibold tracking-wider transition">
-                        <i class="bi bi-gate text-lg mr-2"></i>
-                        OPEN GATE
-                    </button>
-                </div>
-            </form>
-        </div>
-
-        <!-- Projetos existentes -->
-        <div class="bg-dark-surface p-4 rounded-lg border border-dark-border shadow-lg">
-            <h2 class="text-lg font-bold text-white mb-4 tracking-wider">
-                <i class="bi bi-collection text-solo-blue mr-2"></i>
-                ACTIVE GATES
-            </h2>
+                jsonOutput.textContent = JSON.stringify(animeData, null, 2);
+                jsonDisplay.style.display = 'block';
+            } else {
+                jsonDisplay.style.display = 'none';
+            }
+        }
+        
+        function generateAnimeData(number) {
+            // Lista de animes fictícios para exemplo
+            const animeTitles = [
+                "Attack on Titan",
+                "Demon Slayer",
+                "Jujutsu Kaisen",
+                "My Hero Academia",
+                "One Piece",
+                "Naruto",
+                "Death Note",
+                "Fullmetal Alchemist: Brotherhood",
+                "Hunter x Hunter",
+                "Steins;Gate"
+            ];
             
-            <div id="projectsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <!-- Projetos serão carregados dinamicamente aqui -->
-            </div>
+            // Gera uma lista aleatória de animes
+            const count = number % 5 + 1; // Entre 1 e 5 animes
+            const animes = [];
             
-            <!-- Mensagem para quando não existem projetos -->
-            <div id="noProjects" class="text-center py-8 text-gray-400">
-                <i class="bi bi-gate text-4xl mb-3 block text-solo-blue"></i>
-                <p class="tracking-wider">NO ACTIVE GATES FOUND</p>
-                <p class="text-sm mt-2 tracking-wider">CREATE YOUR FIRST SHADOW GATE ABOVE</p>
-            </div>
-        </div>
-    </main>
-
-    <!-- Botões de navegação inferiores -->
-    <footer class="fixed bottom-0 w-full bg-gray-900 border-t border-dark-border shadow-lg">
-        <div class="flex justify-around py-3">
-            <button class="flex items-center justify-center w-12 h-12 rounded-full bg-gray-800 hover:bg-solo-blue hover:text-white transition">
-                <i class="bi bi-arrow-counterclockwise text-xl text-gray-300 hover:text-white"></i>
-            </button>
-            <button class="flex items-center justify-center w-12 h-12 rounded-full bg-gray-800 hover:bg-solo-blue hover:text-white transition">
-                <i class="bi bi-gate text-xl text-solo-blue"></i>
-            </button>
-            <button class="flex items-center justify-center w-12 h-12 rounded-full bg-gray-800 hover:bg-solo-blue hover:text-white transition">
-                <i class="bi bi-box-arrow-left text-xl text-gray-300 hover:text-white"></i>
-            </button>
-        </div>
-    </footer>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js"></script>
+            for (let i = 0; i < count; i++) {
+                const randomIndex = (number.charCodeAt(i % number.length) + i) % animeTitles.length;
+                animes.push({
+                    id: i + 1,
+                    title: animeTitles[randomIndex],
+                    year: 2010 + (number.charCodeAt(i % number.length) % 15,
+                    episodes: 12 + (number.charCodeAt(i % number.length) % 50),
+                    rating: (3 + (number.charCodeAt(i % number.length) % 20) / 10).toFixed(1)
+                });
+            }
+            
+            return {
+                requestId: number,
+                timestamp: new Date().toISOString(),
+                animes: animes,
+                message: `Você solicitou dados de animes com o ID ${number}`
+            };
+        }
+    </script>
 </body>
-  </html>
+</html>
