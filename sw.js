@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shadow-gate-v14';
+const CACHE_NAME = 'shadow-gate-v15';
 const CACHE_URLS = [
   '/',
   '/index.html',
@@ -7,13 +7,11 @@ const CACHE_URLS = [
   '/app.js',
   '/dashboard.js',
   '/dashboard.css',
-  '/offline.html'
 ];
 
 const supabaseUrl = 'https://nwoswxbtlquiekyangbs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53b3N3eGJ0bHF1aWVreWFuZ2JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3ODEwMjcsImV4cCI6MjA2MDM1NzAyN30.KarBv9AopQpldzGPamlj3zu9eScKltKKHH2JJblpoCE';
 
-// Configuração do serviço de filmes
 const XTREAM_CONFIG = {
   host: 'sigcine1.space',
   port: 80,
@@ -21,7 +19,6 @@ const XTREAM_CONFIG = {
   password: '355591139'
 };
 
-// Função para mostrar alertas nos clients
 async function showAlert(message, type) {
   const clients = await self.clients.matchAll();
   clients.forEach(client => {
@@ -32,7 +29,6 @@ async function showAlert(message, type) {
   });
 }
 
-// Função para verificar se o projeto existe
 async function verifyProjectExists(projectId) {
   try {
     const response = await fetch(`${supabaseUrl}/rest/v1/project_tokens?project_id=eq.${projectId}`, {
@@ -50,7 +46,6 @@ async function verifyProjectExists(projectId) {
   }
 }
 
-// Função para incrementar contador de requests
 async function incrementRequestCount(projectId, endpoint) {
   try {
     const today = new Date().toISOString().split('T')[0];
@@ -120,14 +115,13 @@ async function incrementRequestCount(projectId, endpoint) {
   }
 }
 
-// Handler para requests de /animes
 async function handleAnimeRequest(event) {
   try {
     const url = new URL(event.request.url);
     const pathParts = url.pathname.split('/').filter(part => part !== '');
-    const projectId = pathParts[0];
+    const projectId = pathParts[1];
     
-    if (!projectId || pathParts[1] !== 'animes') {
+    if (!projectId || pathParts[2] !== 'animes') {
       return new Response(JSON.stringify({ error: 'Endpoint inválido' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -165,14 +159,13 @@ async function handleAnimeRequest(event) {
   }
 }
 
-// Handler para requests de /filmes
 async function handleFilmesRequest(event) {
   try {
     const url = new URL(event.request.url);
     const pathParts = url.pathname.split('/').filter(part => part !== '');
-    const projectId = pathParts[0];
+    const projectId = pathParts[1];
     
-    if (!projectId || pathParts[1] !== 'filmes') {
+    if (!projectId || pathParts[2] !== 'filmes') {
       return new Response(JSON.stringify({ error: 'Endpoint inválido' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -198,7 +191,7 @@ async function handleFilmesRequest(event) {
 
     const filmesComPlayer = filmesData.map(filme => ({
       ...filme,
-      player: `${self.location.origin}/${projectId}/stream/${filme.stream_id}.mp4`
+      player: `${self.location.origin}/api/${projectId}/stream/${filme.stream_id}.mp4`
     }));
 
     return new Response(JSON.stringify({
@@ -220,15 +213,14 @@ async function handleFilmesRequest(event) {
   }
 }
 
-// Handler para requests de streaming
 async function handleStreamRequest(event) {
   try {
     const url = new URL(event.request.url);
     const pathParts = url.pathname.split('/').filter(part => part !== '');
     
-    if (pathParts.length === 3 && pathParts[1] === 'stream') {
-      const projectId = pathParts[0];
-      const streamId = pathParts[2].replace('.mp4', '');
+    if (pathParts.length === 4 && pathParts[2] === 'stream') {
+      const projectId = pathParts[1];
+      const streamId = pathParts[3].replace('.mp4', '');
       
       const projectExists = await verifyProjectExists(projectId);
       if (!projectExists) return new Response(null, { status: 404 });
@@ -255,21 +247,20 @@ async function handleStreamRequest(event) {
   }
 }
 
-// Evento fetch principal
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
-  if (url.pathname.match(/\/[^\/]+\/animes$/)) {
+  if (url.pathname.match(/\/api\/[^\/]+\/animes$/)) {
     event.respondWith(handleAnimeRequest(event));
     return;
   }
   
-  if (url.pathname.match(/\/[^\/]+\/filmes$/)) {
+  if (url.pathname.match(/\/api\/[^\/]+\/filmes$/)) {
     event.respondWith(handleFilmesRequest(event));
     return;
   }
 
-  if (url.pathname.match(/\/[^\/]+\/stream\/[^\/]+\.mp4$/)) {
+  if (url.pathname.match(/\/api\/[^\/]+\/stream\/[^\/]+\.mp4$/)) {
     event.respondWith(handleStreamRequest(event));
     return;
   }
@@ -298,13 +289,12 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Instalação do Service Worker
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(CACHE_URLS))
       .then(() => showAlert('Aplicativo pronto para uso offline!', 'success'))
-      .then(() => self.skipWaiting())
+      .then(() => self.skipWaiting()))
       .catch(error => {
         showAlert('Falha ao instalar cache: ' + error.message, 'danger');
         throw error;
@@ -312,7 +302,6 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Ativação do Service Worker
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -332,18 +321,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Mensagens do Service Worker
 self.addEventListener('message', (event) => {
   if (event.data.type === 'GET_PROJECTS') {
     event.ports[0].postMessage(getProjects());
   }
 });
 
-// Função auxiliar para obter projetos
 function getProjects() {
   try {
     return JSON.parse(localStorage.getItem('shadowGateProjects4')) || [];
   } catch (e) {
     return [];
   }
-}
+          }
